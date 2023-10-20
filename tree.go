@@ -81,14 +81,14 @@ func (t *Tree[V]) Delete(k V) error {
 	return t.Delete(k)
 }
 
-// splitChild - internal function for splitting node with full amound of keys to two nodes
+// splitChild - internal function for splitting node with full amount of keys to two nodes
 func (t *Tree[V]) splitChild(n *node[V], i int) {
 	nodeToSplit := n.children[i]
 	middleKey := nodeToSplit.keys[t.t-1]
 	insertKeyToNode(n, i, middleKey)
 
 	newNode := newSplitNode(t.t, nodeToSplit)
-	n.children = insertChildren(n.children, i+1, newNode)
+	n.children = insertNodeToNodes(n.children, i+1, newNode)
 
 	nodeToSplit.n = t.t - 1
 	nodeToSplit.keys = nodeToSplit.keys[:t.t-1]

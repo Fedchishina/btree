@@ -49,17 +49,18 @@ func insertIndex[V constraints.Ordered](n *node[V], k V) int {
 
 // insertIndex - insert key to node on the i-position in key's array
 func insertKeyToNode[V constraints.Ordered](n *node[V], i int, k V) {
-	if len(n.keys) == n.n {
+	if len(n.keys) <= n.n {
 		n.keys = append(n.keys, k)
 	}
+
 	copy(n.keys[i+1:], n.keys[i:])
 	n.keys[i] = k
 	n.n++
 }
 
-// insertChildren - insert node to array of children nodes on the i-position
-func insertChildren[V constraints.Ordered](children []*node[V], i int, c *node[V]) []*node[V] {
-	return append(children[:i], append([]*node[V]{c}, children[i:]...)...)
+// insertNodeToNodes - insert node to array of nodes on the i-position
+func insertNodeToNodes[V constraints.Ordered](nodes []*node[V], i int, n *node[V]) []*node[V] {
+	return append(nodes[:i], append([]*node[V]{n}, nodes[i:]...)...)
 }
 
 // shouldSplitChildren - function for verifying should split node or not
