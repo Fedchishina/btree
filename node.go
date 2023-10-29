@@ -18,8 +18,8 @@ type node[V constraints.Ordered] struct {
 func newNode[V constraints.Ordered](t int) *node[V] {
 	return &node[V]{
 		n:        0,
-		keys:     make([]V, 0),
-		children: make([]*node[V], 0),
+		keys:     make([]V, 0, 2*t-1),
+		children: make([]*node[V], 0, 2*t),
 		leaf:     true,
 	}
 }

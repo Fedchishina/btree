@@ -258,6 +258,12 @@ func TestTree_Exists(t1 *testing.T) {
 			args: args[string]{key: "F"},
 			want: true,
 		},
+		{
+			name: "tree with root and one child - found",
+			t:    getTree([]string{"A", "B", "D", "E", "F", "C"}, 2),
+			args: args[string]{key: "F"},
+			want: true,
+		},
 	}
 	for _, tt := range tests {
 		t1.Run(tt.name, func(t1 *testing.T) {
