@@ -322,9 +322,9 @@ func TestTree_Delete(t1 *testing.T) {
 		{
 			name:           "delete key node (left child)",
 			t:              getTree([]string{"A", "B", "D", "E", "F", "C", "G", "K", "M"}, 3),
-			args:           args[string]{k: "D"},
+			args:           args[string]{k: "C"},
 			wantErr:        false,
-			tAfterDeleting: getTree([]string{"A", "B", "E", "F", "C", "G", "K", "M"}, 3),
+			tAfterDeleting: getTree([]string{"A", "B", "D", "E", "F", "G", "K", "M"}, 3),
 		},
 		{
 			name:           "delete key node (right child)",

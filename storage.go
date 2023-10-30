@@ -12,6 +12,7 @@ type storage[V constraints.Ordered] interface {
 	name() string
 	readNode(nodeName string) (*nodeStorage[V], error)
 	writeNode(n *nodeStorage[V]) error
+	deleteNode(nodeName string) error
 }
 
 // FileStorage - is a storage for keeping files of tree. Format of files in this realisation - json
@@ -73,6 +74,10 @@ func (fs *FileStorage[V]) writeNode(n *nodeStorage[V]) error {
 	}
 
 	return nil
+}
+
+func (fs *FileStorage[V]) deleteNode(nodeName string) error {
+	return os.Remove(fs.filePath(nodeName))
 }
 
 // filePath - this function returns filePath of node in storage

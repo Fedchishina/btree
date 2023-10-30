@@ -24,15 +24,15 @@ func newNodeStorage[V constraints.Ordered](t int, name string) *nodeStorage[V] {
 	}
 }
 
-// insertKeyToNodeStorage - insert key to nodeStorage on the i-position in key's array
-func insertKeyToNodeStorage[V constraints.Ordered](n *nodeStorage[V], i int, k V) {
+// insertKey - insert key to nodeStorage on the i-position in key's array
+func (n *nodeStorage[V]) insertKey(i int, k V) {
 	n.Keys = append(n.Keys, k)
 	copy(n.Keys[i+1:], n.Keys[i:])
 	n.Keys[i] = k
 }
 
 // insertChild - insert child to children of nodeStorage on the i-position
-func insertChild[V constraints.Ordered](n *nodeStorage[V], i int, child string) {
+func (n *nodeStorage[V]) insertChild(i int, child string) {
 	n.Children = append(n.Children, child)
 	copy(n.Children[i+1:], n.Children[i:])
 	n.Children[i] = child
@@ -49,4 +49,25 @@ func newSplitNodeStorage[V constraints.Ordered](t int, nodeToSplit *nodeStorage[
 	}
 
 	return n
+}
+
+// deleteMaxKey - delete max key in array of nodeStorage's keys
+func (n *nodeStorage[V]) deleteMaxKey() V {
+	maxKey := n.Keys[len(n.Keys)-1]
+	n.deleteKeyByIndex(len(n.Keys) - 1)
+
+	return maxKey
+}
+
+// deleteMinKey - delete min key in array of nodeStorage's keys
+func (n *nodeStorage[V]) deleteMinKey() V {
+	minKey := n.Keys[0]
+	n.deleteKeyByIndex(0)
+
+	return minKey
+}
+
+// deleteKeyByKey - delete key by key in array of nodeStorage's keys
+func (n *nodeStorage[V]) deleteKeyByIndex(i int) {
+	n.Keys = append(n.Keys[:i], n.Keys[i+1:]...)
 }

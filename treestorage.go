@@ -2,6 +2,7 @@ package btree
 
 import (
 	"errors"
+	"fmt"
 	"strconv"
 
 	"golang.org/x/exp/constraints"
@@ -43,7 +44,7 @@ func (t *TreeStorage[V]) Exists(k V) (bool, error) {
 		return false, err
 	}
 
-	s, err := t.search(root, k)
+	s, _, err := t.search(root, k)
 	if err != nil {
 		return false, err
 	}
@@ -94,7 +95,7 @@ func (t *TreeStorage[V]) insertNonFull(n *nodeStorage[V], k V) error {
 	}
 
 	if n.Leaf {
-		insertKeyToNodeStorage(n, i, k)
+		n.insertKey(i, k)
 		return t.storage.writeNode(n)
 	}
 
@@ -124,10 +125,10 @@ func (t *TreeStorage[V]) insertNonFull(n *nodeStorage[V], k V) error {
 // splitChild - internal function for splitting nodeStorage with full amount of keys to two nodes
 func (t *TreeStorage[V]) splitChild(n, nodeToSplit *nodeStorage[V], i int) error {
 	middleKey := nodeToSplit.Keys[t.t-1]
-	insertKeyToNodeStorage(n, i, middleKey)
+	n.insertKey(i, middleKey)
 
 	newNode := newSplitNodeStorage(t.t, nodeToSplit, n.Name+strconv.Itoa(i+1))
-	insertChild(n, i+1, newNode.Name)
+	n.insertChild(i+1, newNode.Name)
 
 	nodeToSplit.Name = n.Name + strconv.Itoa(i)
 	nodeToSplit.Keys = nodeToSplit.Keys[:t.t-1]
@@ -149,9 +150,9 @@ func (t *TreeStorage[V]) splitChild(n, nodeToSplit *nodeStorage[V], i int) error
 }
 
 // search - search nodeStorage by key
-func (t *TreeStorage[V]) search(n *nodeStorage[V], k V) (*nodeStorage[V], error) {
+func (t *TreeStorage[V]) search(n *nodeStorage[V], k V) (*nodeStorage[V], int, error) {
 	if n == nil {
-		return nil, nil
+		return nil, 0, nil
 	}
 	numKeys := len(n.Keys)
 
@@ -161,17 +162,128 @@ func (t *TreeStorage[V]) search(n *nodeStorage[V], k V) (*nodeStorage[V], error)
 	}
 
 	if i < numKeys && k == n.Keys[i] {
-		return n, nil
+		return n, i, nil
 	}
 
 	if n.Leaf {
-		return nil, nil
+		return nil, 0, nil
 	}
 
 	c, err := t.storage.readNode(n.Children[i])
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	return t.search(c, k)
+}
+
+// Delete is a function for deleting key in TreeStorage
+// - param k should be `ordered type` (`int`, `string`, `float` etc.)
+// if TreeStorage doesn't have this key - function returns an error
+func (t *TreeStorage[V]) Delete(k V) error {
+	root, err := t.storage.readNode(RootName)
+	if err != nil {
+		return err
+	}
+
+	n, i, err := t.search(root, k)
+	if err != nil {
+		return err
+	}
+
+	if n == nil {
+		return errors.New(fmt.Sprintf("not found node with key: %v", k))
+	}
+
+	if n.Leaf {
+		n.deleteKeyByIndex(i)
+		if err = t.storage.writeNode(n); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	childLeft, err := t.storage.readNode(n.Children[i])
+	if err != nil {
+		return err
+	}
+
+	if len(childLeft.Keys) >= t.t {
+		predecessor := childLeft.deleteMaxKey()
+		n.Keys[i] = predecessor
+		if err = t.storage.writeNode(n); err != nil {
+			return err
+		}
+
+		if err = t.storage.writeNode(childLeft); err != nil {
+			return err
+		}
+
+		return nil
+	}
+
+	childRight, err := t.storage.readNode(n.Children[i+1])
+	if err != nil {
+		return err
+	}
+	if len(childRight.Keys) >= t.t {
+		successor := childRight.deleteMinKey()
+		n.Keys[i] = successor
+		if err = t.storage.writeNode(n); err != nil {
+			return err
+		}
+
+		if err = t.storage.writeNode(childRight); err != nil {
+			return err
+		}
+
+		return nil
+	}
+
+	return t.mergeNodes(n, i)
+}
+
+func (t *TreeStorage[V]) mergeNodes(n *nodeStorage[V], i int) error {
+	leftChild, err := t.storage.readNode(n.Children[i])
+	if err != nil {
+		return err
+	}
+	rightChild, err := t.storage.readNode(n.Children[i+1])
+	if err != nil {
+		return err
+	}
+
+	leftChild.Keys = append(leftChild.Keys, rightChild.Keys...)
+
+	if !leftChild.Leaf {
+		leftChild.Children = append(leftChild.Children, rightChild.Children...)
+	}
+
+	if err = t.storage.writeNode(leftChild); err != nil {
+		return err
+	}
+
+	n.Keys = append(n.Keys[:i], n.Keys[i+1:]...)
+	n.Children = append(n.Children[:i+1], n.Children[i+2:]...)
+
+	if len(n.Keys) == 0 {
+		n.Keys = leftChild.Keys
+		n.Children = leftChild.Children
+		if len(n.Children) == 0 {
+			n.Leaf = true
+		}
+		if err = t.storage.deleteNode(leftChild.Name); err != nil {
+			return err
+		}
+	}
+
+	if err = t.storage.writeNode(n); err != nil {
+		return err
+	}
+
+	if err = t.storage.deleteNode(rightChild.Name); err != nil {
+		return err
+	}
+
+	return nil
 }

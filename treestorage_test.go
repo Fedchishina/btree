@@ -374,6 +374,489 @@ func TestTreStorage_Insert_split_leaf(t1 *testing.T) {
 	checkTreeStructure(t, t1, validTreeAfterInsert2)
 }
 
+func TestTreeStorage_Delete(t1 *testing.T) {
+	type args[V constraints.Ordered] struct {
+		k V
+	}
+	type testCase[V constraints.Ordered] struct {
+		name         string
+		t            *TreeStorage[V]
+		args         args[V]
+		wantErr      bool
+		wantRootNode *nodeStorage[V]
+	}
+	tests := []testCase[string]{
+		{
+			name:    "empty_tree",
+			t:       createTreeStorage(3, []string{}, "empty_tree"),
+			args:    args[string]{k: "A"},
+			wantErr: true,
+			wantRootNode: &nodeStorage[string]{
+				Name:     "0",
+				Keys:     []string{},
+				Children: []string{},
+				Leaf:     true,
+			},
+		},
+		{
+			name:    "tree_with_one_element-not_found",
+			t:       createTreeStorage(3, []string{"A", "B", "C"}, "tree_with_one_element-not_found"),
+			args:    args[string]{k: "D"},
+			wantErr: true,
+			wantRootNode: &nodeStorage[string]{
+				Name:     "0",
+				Keys:     []string{"A", "B", "C"},
+				Children: []string{},
+				Leaf:     true,
+			},
+		},
+		{
+			name:    "delete_first_leaf",
+			t:       createTreeStorage(3, []string{"A", "B", "C"}, "delete_first_leaf"),
+			args:    args[string]{k: "A"},
+			wantErr: false,
+			wantRootNode: &nodeStorage[string]{
+				Name:     "0",
+				Keys:     []string{"B", "C"},
+				Children: []string{},
+				Leaf:     true,
+			},
+		},
+		{
+			name:    "delete_last_leaf",
+			t:       createTreeStorage(3, []string{"A", "B", "C"}, "delete_last_leaf"),
+			args:    args[string]{k: "C"},
+			wantErr: false,
+			wantRootNode: &nodeStorage[string]{
+				Name:     "0",
+				Keys:     []string{"A", "B"},
+				Children: []string{},
+				Leaf:     true,
+			},
+		},
+		{
+			name:    "delete_middle_leaf",
+			t:       createTreeStorage(3, []string{"A", "B", "C"}, "delete_middle_leaf"),
+			args:    args[string]{k: "B"},
+			wantErr: false,
+			wantRootNode: &nodeStorage[string]{
+				Name:     "0",
+				Keys:     []string{"A", "C"},
+				Children: []string{},
+				Leaf:     true,
+			},
+		},
+	}
+	for _, tt := range tests {
+		t1.Run(tt.name, func(t1 *testing.T) {
+			if err := tt.t.Delete(tt.args.k); (err != nil) != tt.wantErr {
+				t1.Errorf("Delete() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			v := []validNodeStorage[string]{
+				{
+					nodeName: "0",
+					want:     tt.wantRootNode,
+				},
+			}
+			checkTreeStructure(tt.t, t1, v)
+			os.RemoveAll(tt.name)
+		})
+	}
+}
+
+func TestTreeStorage_Delete_delete_key_from_left_child(t1 *testing.T) {
+	testFolder := "delete_key_from_left_child"
+	defer os.RemoveAll(testFolder)
+	t := createTreeStorage(3, []string{"A", "B", "D", "E", "F", "C", "G", "K", "M"}, testFolder)
+
+	validTree := []validNodeStorage[string]{
+		{
+			nodeName: "0",
+			want: &nodeStorage[string]{
+				Name:     "0",
+				Keys:     []string{"D"},
+				Children: []string{"00", "01"},
+				Leaf:     false,
+			},
+		},
+		{
+			nodeName: "00",
+			want: &nodeStorage[string]{
+				Name:     "00",
+				Keys:     []string{"A", "B", "C"},
+				Children: []string{},
+				Leaf:     true,
+			},
+		},
+		{
+			nodeName: "01",
+			want: &nodeStorage[string]{
+				Name:     "01",
+				Keys:     []string{"E", "F", "G", "K", "M"},
+				Children: []string{},
+				Leaf:     true,
+			},
+		},
+	}
+
+	// check tree structure before deleting
+	checkTreeStructure(t, t1, validTree)
+
+	t.Delete("C")
+
+	// check tree's structure after delete
+	validTreeAfterDeleting := []validNodeStorage[string]{
+		{
+			nodeName: "0",
+			want: &nodeStorage[string]{
+				Name:     "0",
+				Keys:     []string{"D"},
+				Children: []string{"00", "01"},
+				Leaf:     false,
+			},
+		},
+		{
+			nodeName: "00",
+			want: &nodeStorage[string]{
+				Name:     "00",
+				Keys:     []string{"A", "B"},
+				Children: []string{},
+				Leaf:     true,
+			},
+		},
+		{
+			nodeName: "01",
+			want: &nodeStorage[string]{
+				Name:     "01",
+				Keys:     []string{"E", "F", "G", "K", "M"},
+				Children: []string{},
+				Leaf:     true,
+			},
+		},
+	}
+	// check tree structure after deleting
+	checkTreeStructure(t, t1, validTreeAfterDeleting)
+}
+
+func TestTreeStorage_Delete_delete_key_from_right_child(t1 *testing.T) {
+	testFolder := "delete_key_from_right_child"
+	defer os.RemoveAll(testFolder)
+	t := createTreeStorage(3, []string{"A", "B", "D", "E", "F", "C", "G", "K", "M"}, testFolder)
+
+	validTree := []validNodeStorage[string]{
+		{
+			nodeName: "0",
+			want: &nodeStorage[string]{
+				Name:     "0",
+				Keys:     []string{"D"},
+				Children: []string{"00", "01"},
+				Leaf:     false,
+			},
+		},
+		{
+			nodeName: "00",
+			want: &nodeStorage[string]{
+				Name:     "00",
+				Keys:     []string{"A", "B", "C"},
+				Children: []string{},
+				Leaf:     true,
+			},
+		},
+		{
+			nodeName: "01",
+			want: &nodeStorage[string]{
+				Name:     "01",
+				Keys:     []string{"E", "F", "G", "K", "M"},
+				Children: []string{},
+				Leaf:     true,
+			},
+		},
+	}
+
+	// check tree structure before deleting
+	checkTreeStructure(t, t1, validTree)
+
+	t.Delete("G")
+
+	// check tree's structure after delete
+	validTreeAfterDeleting := []validNodeStorage[string]{
+		{
+			nodeName: "0",
+			want: &nodeStorage[string]{
+				Name:     "0",
+				Keys:     []string{"D"},
+				Children: []string{"00", "01"},
+				Leaf:     false,
+			},
+		},
+		{
+			nodeName: "00",
+			want: &nodeStorage[string]{
+				Name:     "00",
+				Keys:     []string{"A", "B", "C"},
+				Children: []string{},
+				Leaf:     true,
+			},
+		},
+		{
+			nodeName: "01",
+			want: &nodeStorage[string]{
+				Name:     "01",
+				Keys:     []string{"E", "F", "K", "M"},
+				Children: []string{},
+				Leaf:     true,
+			},
+		},
+	}
+	// check tree structure after deleting
+	checkTreeStructure(t, t1, validTreeAfterDeleting)
+}
+
+func TestTreeStorage_Delete_get_key_from_left_child(t1 *testing.T) {
+	testFolder := "get_key_from_left_child"
+	defer os.RemoveAll(testFolder)
+	t := createTreeStorage(3, []string{"A", "B", "D", "E", "F", "C", "G", "K", "M"}, testFolder)
+
+	validTree := []validNodeStorage[string]{
+		{
+			nodeName: "0",
+			want: &nodeStorage[string]{
+				Name:     "0",
+				Keys:     []string{"D"},
+				Children: []string{"00", "01"},
+				Leaf:     false,
+			},
+		},
+		{
+			nodeName: "00",
+			want: &nodeStorage[string]{
+				Name:     "00",
+				Keys:     []string{"A", "B", "C"},
+				Children: []string{},
+				Leaf:     true,
+			},
+		},
+		{
+			nodeName: "01",
+			want: &nodeStorage[string]{
+				Name:     "01",
+				Keys:     []string{"E", "F", "G", "K", "M"},
+				Children: []string{},
+				Leaf:     true,
+			},
+		},
+	}
+
+	// check tree structure before deleting
+	checkTreeStructure(t, t1, validTree)
+
+	t.Delete("D")
+
+	// check tree's structure after delete
+	validTreeAfterDeleting := []validNodeStorage[string]{
+		{
+			nodeName: "0",
+			want: &nodeStorage[string]{
+				Name:     "0",
+				Keys:     []string{"C"},
+				Children: []string{"00", "01"},
+				Leaf:     false,
+			},
+		},
+		{
+			nodeName: "00",
+			want: &nodeStorage[string]{
+				Name:     "00",
+				Keys:     []string{"A", "B"},
+				Children: []string{},
+				Leaf:     true,
+			},
+		},
+		{
+			nodeName: "01",
+			want: &nodeStorage[string]{
+				Name:     "01",
+				Keys:     []string{"E", "F", "G", "K", "M"},
+				Children: []string{},
+				Leaf:     true,
+			},
+		},
+	}
+	// check tree structure after deleting
+	checkTreeStructure(t, t1, validTreeAfterDeleting)
+}
+
+func TestTreeStorage_Delete_get_key_from_right_child(t1 *testing.T) {
+	testFolder := "get_key_from_right_child"
+	defer os.RemoveAll(testFolder)
+	t := createTreeStorage(3, []string{"A", "B", "D", "E", "F", "C", "G", "K", "M", "N", "O"}, testFolder)
+
+	validTree := []validNodeStorage[string]{
+		{
+			nodeName: "0",
+			want: &nodeStorage[string]{
+				Name:     "0",
+				Keys:     []string{"D", "G"},
+				Children: []string{"00", "01", "02"},
+				Leaf:     false,
+			},
+		},
+		{
+			nodeName: "00",
+			want: &nodeStorage[string]{
+				Name:     "00",
+				Keys:     []string{"A", "B", "C"},
+				Children: []string{},
+				Leaf:     true,
+			},
+		},
+		{
+			nodeName: "01",
+			want: &nodeStorage[string]{
+				Name:     "01",
+				Keys:     []string{"E", "F"},
+				Children: []string{},
+				Leaf:     true,
+			},
+		},
+		{
+			nodeName: "02",
+			want: &nodeStorage[string]{
+				Name:     "02",
+				Keys:     []string{"K", "M", "N", "O"},
+				Children: []string{},
+				Leaf:     true,
+			},
+		},
+	}
+
+	// check tree structure before deleting
+	checkTreeStructure(t, t1, validTree)
+
+	t.Delete("G")
+
+	// check tree's structure after delete
+	validTreeAfterDeleting := []validNodeStorage[string]{
+		{
+			nodeName: "0",
+			want: &nodeStorage[string]{
+				Name:     "0",
+				Keys:     []string{"D", "K"},
+				Children: []string{"00", "01", "02"},
+				Leaf:     false,
+			},
+		},
+		{
+			nodeName: "00",
+			want: &nodeStorage[string]{
+				Name:     "00",
+				Keys:     []string{"A", "B", "C"},
+				Children: []string{},
+				Leaf:     true,
+			},
+		},
+		{
+			nodeName: "01",
+			want: &nodeStorage[string]{
+				Name:     "01",
+				Keys:     []string{"E", "F"},
+				Children: []string{},
+				Leaf:     true,
+			},
+		},
+		{
+			nodeName: "02",
+			want: &nodeStorage[string]{
+				Name:     "02",
+				Keys:     []string{"M", "N", "O"},
+				Children: []string{},
+				Leaf:     true,
+			},
+		},
+	}
+	// check tree structure after deleting
+	checkTreeStructure(t, t1, validTreeAfterDeleting)
+}
+
+func TestTreeStorage_Delete_merge_nodes(t1 *testing.T) {
+	testFolder := "merge_nodes"
+	defer os.RemoveAll(testFolder)
+	t := createTreeStorage(3, []string{"A", "B", "D", "E", "F", "C"}, testFolder)
+
+	validTree := []validNodeStorage[string]{
+		{
+			nodeName: "0",
+			want: &nodeStorage[string]{
+				Name:     "0",
+				Keys:     []string{"D"},
+				Children: []string{"00", "01"},
+				Leaf:     false,
+			},
+		},
+		{
+			nodeName: "00",
+			want: &nodeStorage[string]{
+				Name:     "00",
+				Keys:     []string{"A", "B", "C"},
+				Children: []string{},
+				Leaf:     true,
+			},
+		},
+		{
+			nodeName: "01",
+			want: &nodeStorage[string]{
+				Name:     "01",
+				Keys:     []string{"E", "F"},
+				Children: []string{},
+				Leaf:     true,
+			},
+		},
+	}
+	// check tree structure before deleting
+	checkTreeStructure(t, t1, validTree)
+
+	t.Delete("D")
+	t.Delete("C")
+
+	validTreeAfterDeleting := []validNodeStorage[string]{
+		{
+			nodeName: "0",
+			want: &nodeStorage[string]{
+				Name:     "0",
+				Keys:     []string{"A", "B", "E", "F"},
+				Children: []string{},
+				Leaf:     true,
+			},
+		},
+	}
+
+	// check tree structure after deleting
+	checkTreeStructure(t, t1, validTreeAfterDeleting)
+
+	_, err := t.storage.readNode("00")
+	if err == nil {
+		t1.Errorf("Node 00 exists")
+	}
+	_, err = t.storage.readNode("01")
+	if err == nil {
+		t1.Errorf("Node 01 exists")
+	}
+}
+
+func createTreeStorage(t int, elements []string, name string) *TreeStorage[string] {
+	tree, _ := NewTreeStorage[string](t, name)
+	for _, el := range elements {
+		tree.Insert(el)
+	}
+
+	return tree
+}
+
+type validNodeStorage[V constraints.Ordered] struct {
+	nodeName string
+	want     *nodeStorage[V]
+}
+
 func checkTreeStructure(t *TreeStorage[string], t1 *testing.T, treeData []validNodeStorage[string]) {
 	for _, vn := range treeData {
 		n, err := t.storage.readNode(vn.nodeName)
@@ -386,18 +869,4 @@ func checkTreeStructure(t *TreeStorage[string], t1 *testing.T, treeData []validN
 			t1.Errorf("Node %s has unexpected content. Got: %+v, Want: %+v", vn.nodeName, n, vn.want)
 		}
 	}
-}
-
-type validNodeStorage[V constraints.Ordered] struct {
-	nodeName string
-	want     *nodeStorage[V]
-}
-
-func createTreeStorage(t int, elements []string, name string) *TreeStorage[string] {
-	tree, _ := NewTreeStorage[string](t, name)
-	for _, el := range elements {
-		tree.Insert(el)
-	}
-
-	return tree
 }
