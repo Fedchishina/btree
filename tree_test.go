@@ -1,13 +1,14 @@
 package btree
 
 import (
+	"os"
 	"reflect"
 	"testing"
 
 	"golang.org/x/exp/constraints"
 )
 
-func TestNew(t *testing.T) {
+func TestNewTreeStorage(t *testing.T) {
 	type args struct {
 		t int
 	}
@@ -19,27 +20,24 @@ func TestNew(t *testing.T) {
 	}
 	tests := []testCase[int]{
 		{
-			name:    "t is 0",
+			name:    "t_is_0",
 			args:    args{t: 0},
 			want:    nil,
 			wantErr: true,
 		},
 		{
-			name:    "negative t",
+			name:    "negative_t",
 			args:    args{t: -100},
 			want:    nil,
 			wantErr: true,
 		},
 		{
-			name: "success creating empty tree",
+			name: "success_creating_empty_tree",
 			args: args{t: 2},
 			want: &Tree[int]{
 				t: 2,
-				root: &node[int]{
-					n:        0,
-					keys:     make([]int, 0),
-					children: make([]*node[int], 0),
-					leaf:     true,
+				storage: &DiskStorage[int]{
+					folderName: "success_creating_empty_tree",
 				},
 			},
 			wantErr: false,
@@ -47,291 +45,407 @@ func TestNew(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := New[int](tt.args.t)
+			storage, err := NewDiskStorage[int](tt.name, tt.args.t)
+			got, err := NewTree[int](tt.args.t, storage)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("New() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("NewTree() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("New() got = %v, want %v", got, tt.want)
+				t.Errorf("NewTree() got = %v, want %v", got, tt.want)
 			}
+			os.RemoveAll("success_creating_empty_tree")
 		})
 	}
 }
 
-func TestTree_Insert(t1 *testing.T) {
+func TestTreeStorage_Exists(t1 *testing.T) {
 	type args[V constraints.Ordered] struct {
 		k V
 	}
 	type testCase[V constraints.Ordered] struct {
-		name string
-		t    Tree[V]
-		args args[V]
-		want Tree[V]
+		name    string
+		t       *Tree[V]
+		args    args[V]
+		want    bool
+		wantErr bool
 	}
 	tests := []testCase[string]{
 		{
-			name: "insert leaf in the end",
-			t: Tree[string]{
-				t: 3,
-				root: &node[string]{
-					n:        3,
-					keys:     []string{"A", "B", "C", "", ""},
-					children: []*node[string]{},
-					leaf:     true,
-				},
-			},
-			args: args[string]{k: "D"},
-			want: Tree[string]{
-				t: 3,
-				root: &node[string]{
-					n:        4,
-					keys:     []string{"A", "B", "C", "D", ""},
-					children: []*node[string]{},
-					leaf:     true,
-				},
-			},
+			name:    "empty_tree",
+			t:       createTreeStorage(3, []string{}, "empty_tree"),
+			args:    args[string]{k: "A"},
+			want:    false,
+			wantErr: false,
 		},
 		{
-			name: "insert leaf in the beginning",
-			t: Tree[string]{
-				t: 3,
-				root: &node[string]{
-					n:        3,
-					keys:     []string{"B", "C", "D", "", ""},
-					children: []*node[string]{},
-					leaf:     true,
-				},
-			},
-			args: args[string]{k: "A"},
-			want: Tree[string]{
-				t: 3,
-				root: &node[string]{
-					n:        4,
-					keys:     []string{"A", "B", "C", "D", ""},
-					children: []*node[string]{},
-					leaf:     true,
-				},
-			},
+			name:    "tree_with_one_element-not found",
+			t:       createTreeStorage(3, []string{"A"}, "tree_with_one_element-not found"),
+			args:    args[string]{k: "B"},
+			want:    false,
+			wantErr: false,
 		},
 		{
-			name: "insert leaf in the middle",
-			t: Tree[string]{
-				t: 3,
-				root: &node[string]{
-					n:        3,
-					keys:     []string{"A", "C", "D", "", ""},
-					children: []*node[string]{},
-					leaf:     true,
-				},
-			},
-			args: args[string]{k: "B"},
-			want: Tree[string]{
-				t: 3,
-				root: &node[string]{
-					n:        4,
-					keys:     []string{"A", "B", "C", "D", ""},
-					children: []*node[string]{},
-					leaf:     true,
-				},
-			},
+			name:    "tree_with_one_element-found",
+			t:       createTreeStorage(3, []string{"A"}, "tree_with_one_element-found"),
+			args:    args[string]{k: "A"},
+			want:    true,
+			wantErr: false,
+		},
+		{
+			name:    "tree_with_several_elements_in_root-found",
+			t:       createTreeStorage(3, []string{"A", "B", "C", "D"}, "tree_with_several_elements_in_root-found"),
+			args:    args[string]{k: "C"},
+			want:    true,
+			wantErr: false,
+		},
+		{
+			name:    "tree_with_root_and_one_child-not_found",
+			t:       createTreeStorage(3, []string{"A", "B", "D", "E", "F", "C"}, "tree_with_root_and_one_child-not_found"),
+			args:    args[string]{k: "K"},
+			want:    false,
+			wantErr: false,
+		},
+		{
+			name:    "tree_with_root_and_one_child-found",
+			t:       createTreeStorage(3, []string{"A", "B", "D", "E", "F", "C"}, "tree_with_root_and_one_child-found"),
+			args:    args[string]{k: "F"},
+			want:    true,
+			wantErr: false,
 		},
 	}
 	for _, tt := range tests {
 		t1.Run(tt.name, func(t1 *testing.T) {
-			tt.t.Insert(tt.args.k)
-			if !reflect.DeepEqual(tt.t, tt.want) {
-				t1.Errorf("Insert() = %#+v, want %#+v", tt.t, tt.want)
+			got, err := tt.t.Exists(tt.args.k)
+			if (err != nil) != tt.wantErr {
+				t1.Errorf("Exists() error = %v, wantErr %v", err, tt.wantErr)
+				return
 			}
+			if got != tt.want {
+				t1.Errorf("Exists() got = %v, want %v", got, tt.want)
+			}
+			os.RemoveAll(tt.name)
 		})
 	}
 }
 
-func TestTree_Insert_to_full_node(t1 *testing.T) {
-	t := getTree([]string{"A", "B", "D", "E", "F"}, 3)
-	validTree := []validNode[string]{
-		{node: t.root, keys: []string{"A", "B", "D", "E", "F"}, leaf: true, n: 5},
+func TestTreeStorage_Insert(t1 *testing.T) {
+	type args[V constraints.Ordered] struct {
+		k V
 	}
 
-	// check tree's structure before insert
-	for _, n := range validTree {
-		checkNode(t1, &n)
+	type testCase[V constraints.Ordered] struct {
+		name         string
+		t            *Tree[V]
+		args         args[V]
+		wantErr      bool
+		wantRootNode *Node[V]
 	}
 
-	t.Insert("C")
-
-	// check tree's structure after insert
-	validTreeAfterInsert := []validNode[string]{
-		{node: t.root, keys: []string{"D"}, leaf: false, n: 1},
-		{node: t.root.children[0], keys: []string{"A", "B", "C"}, leaf: true, n: 3},
-		{node: t.root.children[1], keys: []string{"E", "F"}, leaf: true, n: 2},
+	tests := []testCase[string]{
+		{
+			name:    "insert_leaf_in_the_end",
+			t:       createTreeStorage(3, []string{"A", "B", "C"}, "insert_leaf_in_the_end"),
+			args:    args[string]{k: "D"},
+			wantErr: false,
+			wantRootNode: &Node[string]{
+				Name:     "0",
+				Keys:     []string{"A", "B", "C", "D"},
+				Children: []string{},
+				Leaf:     true,
+			},
+		},
+		{
+			name:    "insert_leaf_in_the_beginning",
+			t:       createTreeStorage(3, []string{"B", "C", "D"}, "insert_leaf_in_the_beginning"),
+			args:    args[string]{k: "A"},
+			wantErr: false,
+			wantRootNode: &Node[string]{
+				Name:     "0",
+				Keys:     []string{"A", "B", "C", "D"},
+				Children: []string{},
+				Leaf:     true,
+			},
+		},
+		{
+			name:    "insert_leaf_in_the_middle",
+			t:       createTreeStorage(3, []string{"A", "B", "D"}, "insert_leaf_in_the_middle"),
+			args:    args[string]{k: "C"},
+			wantErr: false,
+			wantRootNode: &Node[string]{
+				Name:     "0",
+				Keys:     []string{"A", "B", "C", "D"},
+				Children: []string{},
+				Leaf:     true,
+			},
+		},
 	}
-	for _, n := range validTreeAfterInsert {
-		checkNode(t1, &n)
+
+	for _, tt := range tests {
+		t1.Run(tt.name, func(t1 *testing.T) {
+			if err := tt.t.Insert(tt.args.k); (err != nil) != tt.wantErr {
+				t1.Errorf("Insert() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			v := []validNodeStorage[string]{
+				{
+					nodeName: "0",
+					want:     tt.wantRootNode,
+				},
+			}
+			checkTreeStructure(tt.t, t1, v)
+			os.RemoveAll(tt.name)
+		})
 	}
 }
 
-func TestTree_Insert_split_leaf(t1 *testing.T) {
-	t := getTree([]string{"A", "B", "D", "E", "F", "C"}, 3)
-	validTree := []validNode[string]{
-		{node: t.root, keys: []string{"D"}, leaf: false, n: 1},
-		{node: t.root.children[0], keys: []string{"A", "B", "C"}, leaf: true, n: 3},
-		{node: t.root.children[1], keys: []string{"E", "F"}, leaf: true, n: 2},
+func TestTreStorage_Insert_to_full_node(t1 *testing.T) {
+	testFolder := "insert_to_full_node"
+	defer os.RemoveAll(testFolder)
+
+	t := createTreeStorage(3, []string{"A", "B", "D", "E", "F"}, testFolder)
+
+	validTree := []validNodeStorage[string]{
+		{
+			nodeName: "0",
+			want: &Node[string]{
+				Name:     "0",
+				Keys:     []string{"A", "B", "D", "E", "F"},
+				Children: []string{},
+				Leaf:     true,
+			},
+		},
 	}
 
-	// check tree's structure before insert
-	for _, n := range validTree {
-		checkNode(t1, &n)
+	// check tree structure before insert
+	checkTreeStructure(t, t1, validTree)
+
+	t.Insert("C")
+
+	// check tree structure after insert
+	validTreeAfterInsert := []validNodeStorage[string]{
+		{
+			nodeName: "0",
+			want: &Node[string]{
+				Name:     "0",
+				Keys:     []string{"D"},
+				Children: []string{"00", "01"},
+				Leaf:     false,
+			},
+		},
+		{
+			nodeName: "00",
+			want: &Node[string]{
+				Name:     "00",
+				Keys:     []string{"A", "B", "C"},
+				Children: []string{},
+				Leaf:     true,
+			},
+		},
+		{
+			nodeName: "01",
+			want: &Node[string]{
+				Name:     "01",
+				Keys:     []string{"E", "F"},
+				Children: []string{},
+				Leaf:     true,
+			},
+		},
 	}
+
+	checkTreeStructure(t, t1, validTreeAfterInsert)
+}
+
+func TestTreStorage_Insert_split_leaf(t1 *testing.T) {
+	testFolder := "insert_split_leaf"
+	defer os.RemoveAll(testFolder)
+
+	t := createTreeStorage(3, []string{"A", "B", "D", "E", "F", "C"}, testFolder)
+
+	validTree := []validNodeStorage[string]{
+		{
+			nodeName: "0",
+			want: &Node[string]{
+				Name:     "0",
+				Keys:     []string{"D"},
+				Children: []string{"00", "01"},
+				Leaf:     false,
+			},
+		},
+		{
+			nodeName: "00",
+			want: &Node[string]{
+				Name:     "00",
+				Keys:     []string{"A", "B", "C"},
+				Children: []string{},
+				Leaf:     true,
+			},
+		},
+		{
+			nodeName: "01",
+			want: &Node[string]{
+				Name:     "01",
+				Keys:     []string{"E", "F"},
+				Children: []string{},
+				Leaf:     true,
+			},
+		},
+	}
+
+	// check tree structure before insert
+	checkTreeStructure(t, t1, validTree)
 
 	t.Insert("G")
 	t.Insert("K")
 	t.Insert("M")
 
-	// check tree's structure after insert
-	validTreeAfterInsert := []validNode[string]{
-		{node: t.root, keys: []string{"D"}, leaf: false, n: 1},
-		{node: t.root.children[0], keys: []string{"A", "B", "C"}, leaf: true, n: 3},
-		{node: t.root.children[1], keys: []string{"E", "F", "G", "K", "M"}, leaf: true, n: 5},
+	// check tree structure after insert
+	validTreeAfterInsert := []validNodeStorage[string]{
+		{
+			nodeName: "0",
+			want: &Node[string]{
+				Name:     "0",
+				Keys:     []string{"D"},
+				Children: []string{"00", "01"},
+				Leaf:     false,
+			},
+		},
+		{
+			nodeName: "00",
+			want: &Node[string]{
+				Name:     "00",
+				Keys:     []string{"A", "B", "C"},
+				Children: []string{},
+				Leaf:     true,
+			},
+		},
+		{
+			nodeName: "01",
+			want: &Node[string]{
+				Name:     "01",
+				Keys:     []string{"E", "F", "G", "K", "M"},
+				Children: []string{},
+				Leaf:     true,
+			},
+		},
 	}
-	for _, n := range validTreeAfterInsert {
-		checkNode(t1, &n)
-	}
+
+	checkTreeStructure(t, t1, validTreeAfterInsert)
 
 	t.Insert("S")
-	// check tree's structure after insert
-	validTreeAfterInsert2 := []validNode[string]{
-		{node: t.root, keys: []string{"D", "G"}, leaf: false, n: 2},
-		{node: t.root.children[0], keys: []string{"A", "B", "C"}, leaf: true, n: 3},
-		{node: t.root.children[1], keys: []string{"E", "F"}, leaf: true, n: 2},
-		{node: t.root.children[2], keys: []string{"K", "M", "S"}, leaf: true, n: 3},
+
+	validTreeAfterInsert2 := []validNodeStorage[string]{
+		{
+			nodeName: "0",
+			want: &Node[string]{
+				Name:     "0",
+				Keys:     []string{"D", "G"},
+				Children: []string{"00", "01", "02"},
+				Leaf:     false,
+			},
+		},
+		{
+			nodeName: "00",
+			want: &Node[string]{
+				Name:     "00",
+				Keys:     []string{"A", "B", "C"},
+				Children: []string{},
+				Leaf:     true,
+			},
+		},
+		{
+			nodeName: "01",
+			want: &Node[string]{
+				Name:     "01",
+				Keys:     []string{"E", "F"},
+				Children: []string{},
+				Leaf:     true,
+			},
+		},
+		{
+			nodeName: "02",
+			want: &Node[string]{
+				Name:     "02",
+				Keys:     []string{"K", "M", "S"},
+				Children: []string{},
+				Leaf:     true,
+			},
+		},
 	}
-	for _, n := range validTreeAfterInsert2 {
-		checkNode(t1, &n)
-	}
+
+	checkTreeStructure(t, t1, validTreeAfterInsert2)
 }
 
-func TestTree_Exists(t1 *testing.T) {
-	type args[V constraints.Ordered] struct {
-		key V
-	}
-	type testCase[V constraints.Ordered] struct {
-		name string
-		t    *Tree[V]
-		args args[V]
-		want bool
-	}
-	tests := []testCase[string]{
-		{
-			name: "empty tree",
-			t:    getTree([]string{}, 3),
-			args: args[string]{key: "A"},
-			want: false,
-		},
-		{
-			name: "tree with one element - not found",
-			t:    getTree([]string{"A"}, 3),
-			args: args[string]{key: "B"},
-			want: false,
-		},
-		{
-			name: "tree with one element - found",
-			t:    getTree([]string{"A"}, 3),
-			args: args[string]{key: "A"},
-			want: true,
-		},
-		{
-			name: "tree with several elements in root - found",
-			t:    getTree([]string{"A", "B", "C", "D"}, 3),
-			args: args[string]{key: "C"},
-			want: true,
-		},
-		{
-			name: "tree with root and one child - not found",
-			t:    getTree([]string{"A", "B", "D", "E", "F", "C"}, 3),
-			args: args[string]{key: "K"},
-			want: false,
-		},
-		{
-			name: "tree with root and one child - found",
-			t:    getTree([]string{"A", "B", "D", "E", "F", "C"}, 3),
-			args: args[string]{key: "F"},
-			want: true,
-		},
-		{
-			name: "tree with root and one child - found",
-			t:    getTree([]string{"A", "B", "D", "E", "F", "C"}, 2),
-			args: args[string]{key: "F"},
-			want: true,
-		},
-	}
-	for _, tt := range tests {
-		t1.Run(tt.name, func(t1 *testing.T) {
-			if got := tt.t.Exists(tt.args.key); got != tt.want {
-				t1.Errorf("Exists() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestTree_Delete(t1 *testing.T) {
+func TestTreeStorage_Delete(t1 *testing.T) {
 	type args[V constraints.Ordered] struct {
 		k V
 	}
 	type testCase[V constraints.Ordered] struct {
-		name           string
-		t              *Tree[V]
-		args           args[V]
-		wantErr        bool
-		tAfterDeleting *Tree[V]
+		name         string
+		t            *Tree[V]
+		args         args[V]
+		wantErr      bool
+		wantRootNode *Node[V]
 	}
 	tests := []testCase[string]{
 		{
-			name:    "empty tree",
-			t:       getTree([]string{}, 3),
+			name:    "empty_tree",
+			t:       createTreeStorage(3, []string{}, "empty_tree"),
 			args:    args[string]{k: "A"},
 			wantErr: true,
+			wantRootNode: &Node[string]{
+				Name:     "0",
+				Keys:     []string{},
+				Children: []string{},
+				Leaf:     true,
+			},
 		},
 		{
-			name:    "tree with one element - not found",
-			t:       getTree([]string{"A", "B", "C"}, 3),
+			name:    "tree_with_one_element-not_found",
+			t:       createTreeStorage(3, []string{"A", "B", "C"}, "tree_with_one_element-not_found"),
 			args:    args[string]{k: "D"},
 			wantErr: true,
+			wantRootNode: &Node[string]{
+				Name:     "0",
+				Keys:     []string{"A", "B", "C"},
+				Children: []string{},
+				Leaf:     true,
+			},
 		},
 		{
-			name:           "delete first leaf",
-			t:              getTree([]string{"A", "B", "C"}, 3),
-			args:           args[string]{k: "A"},
-			wantErr:        false,
-			tAfterDeleting: getTree([]string{"B", "C"}, 3),
+			name:    "delete_first_leaf",
+			t:       createTreeStorage(3, []string{"A", "B", "C"}, "delete_first_leaf"),
+			args:    args[string]{k: "A"},
+			wantErr: false,
+			wantRootNode: &Node[string]{
+				Name:     "0",
+				Keys:     []string{"B", "C"},
+				Children: []string{},
+				Leaf:     true,
+			},
 		},
 		{
-			name:           "delete last leaf",
-			t:              getTree([]string{"A", "B", "C"}, 3),
-			args:           args[string]{k: "C"},
-			wantErr:        false,
-			tAfterDeleting: getTree([]string{"A", "B"}, 3),
+			name:    "delete_last_leaf",
+			t:       createTreeStorage(3, []string{"A", "B", "C"}, "delete_last_leaf"),
+			args:    args[string]{k: "C"},
+			wantErr: false,
+			wantRootNode: &Node[string]{
+				Name:     "0",
+				Keys:     []string{"A", "B"},
+				Children: []string{},
+				Leaf:     true,
+			},
 		},
 		{
-			name:           "delete middle leaf",
-			t:              getTree([]string{"A", "B", "C"}, 3),
-			args:           args[string]{k: "B"},
-			wantErr:        false,
-			tAfterDeleting: getTree([]string{"A", "C"}, 3),
-		},
-		{
-			name:           "delete key node (left child)",
-			t:              getTree([]string{"A", "B", "D", "E", "F", "C", "G", "K", "M"}, 3),
-			args:           args[string]{k: "C"},
-			wantErr:        false,
-			tAfterDeleting: getTree([]string{"A", "B", "D", "E", "F", "G", "K", "M"}, 3),
-		},
-		{
-			name:           "delete key node (right child)",
-			t:              getTree([]string{"A", "B", "D", "E", "F", "C", "G", "K", "M", "N", "O"}, 3),
-			args:           args[string]{k: "G"},
-			wantErr:        false,
-			tAfterDeleting: getTree([]string{"A", "B", "D", "E", "F", "C", "K", "M", "N", "O"}, 3),
+			name:    "delete_middle_leaf",
+			t:       createTreeStorage(3, []string{"A", "B", "C"}, "delete_middle_leaf"),
+			args:    args[string]{k: "B"},
+			wantErr: false,
+			wantRootNode: &Node[string]{
+				Name:     "0",
+				Keys:     []string{"A", "C"},
+				Children: []string{},
+				Leaf:     true,
+			},
 		},
 	}
 	for _, tt := range tests {
@@ -339,151 +453,422 @@ func TestTree_Delete(t1 *testing.T) {
 			if err := tt.t.Delete(tt.args.k); (err != nil) != tt.wantErr {
 				t1.Errorf("Delete() error = %v, wantErr %v", err, tt.wantErr)
 			}
-			if !tt.wantErr && !reflect.DeepEqual(tt.t, tt.tAfterDeleting) {
-				t1.Errorf("Delete() got = %v, want %v", tt.t, tt.tAfterDeleting)
+			v := []validNodeStorage[string]{
+				{
+					nodeName: "0",
+					want:     tt.wantRootNode,
+				},
 			}
+			checkTreeStructure(tt.t, t1, v)
+			os.RemoveAll(tt.name)
 		})
 	}
 }
 
-func TestTree_Delete_get_key_from_left_child(t1 *testing.T) {
-	t := getTree([]string{"A", "B", "D", "E", "F", "C", "G", "K", "M"}, 3)
-	validTree := []validNode[string]{
-		{node: t.root, keys: []string{"D"}, leaf: false, n: 1},
-		{node: t.root.children[0], keys: []string{"A", "B", "C"}, leaf: true, n: 3},
-		{node: t.root.children[1], keys: []string{"E", "F", "G", "K", "M"}, leaf: true, n: 5},
+func TestTreeStorage_Delete_delete_key_from_left_child(t1 *testing.T) {
+	testFolder := "delete_key_from_left_child"
+	defer os.RemoveAll(testFolder)
+	t := createTreeStorage(3, []string{"A", "B", "D", "E", "F", "C", "G", "K", "M"}, testFolder)
+
+	validTree := []validNodeStorage[string]{
+		{
+			nodeName: "0",
+			want: &Node[string]{
+				Name:     "0",
+				Keys:     []string{"D"},
+				Children: []string{"00", "01"},
+				Leaf:     false,
+			},
+		},
+		{
+			nodeName: "00",
+			want: &Node[string]{
+				Name:     "00",
+				Keys:     []string{"A", "B", "C"},
+				Children: []string{},
+				Leaf:     true,
+			},
+		},
+		{
+			nodeName: "01",
+			want: &Node[string]{
+				Name:     "01",
+				Keys:     []string{"E", "F", "G", "K", "M"},
+				Children: []string{},
+				Leaf:     true,
+			},
+		},
 	}
 
-	// check tree's structure before insert
-	for _, n := range validTree {
-		checkNode(t1, &n)
-	}
-
-	t.Delete("D")
-
-	// check tree's structure after delete
-	validTreeAfterInsert := []validNode[string]{
-		{node: t.root, keys: []string{"C"}, leaf: false, n: 1},
-		{node: t.root.children[0], keys: []string{"A", "B"}, leaf: true, n: 2},
-		{node: t.root.children[1], keys: []string{"E", "F", "G", "K", "M"}, leaf: true, n: 5},
-	}
-	for _, n := range validTreeAfterInsert {
-		checkNode(t1, &n)
-	}
-}
-
-func TestTree_Delete_get_key_from_right_child(t1 *testing.T) {
-	t := getTree([]string{"A", "B", "D", "E", "F", "C", "G", "K", "M", "N", "O"}, 3)
-	validTree := []validNode[string]{
-		{node: t.root, keys: []string{"D", "G"}, leaf: false, n: 2},
-		{node: t.root.children[0], keys: []string{"A", "B", "C"}, leaf: true, n: 3},
-		{node: t.root.children[1], keys: []string{"E", "F"}, leaf: true, n: 2},
-		{node: t.root.children[2], keys: []string{"K", "M", "N", "O"}, leaf: true, n: 4},
-	}
-
-	// check tree's structure before insert
-	for _, n := range validTree {
-		checkNode(t1, &n)
-	}
-
-	t.Delete("G")
-
-	// check tree's structure after delete
-	validTreeAfterInsert := []validNode[string]{
-		{node: t.root, keys: []string{"D", "K"}, leaf: false, n: 2},
-		{node: t.root.children[0], keys: []string{"A", "B", "C"}, leaf: true, n: 3},
-		{node: t.root.children[1], keys: []string{"E", "F"}, leaf: true, n: 2},
-		{node: t.root.children[2], keys: []string{"M", "N", "O"}, leaf: true, n: 3},
-	}
-	for _, n := range validTreeAfterInsert {
-		checkNode(t1, &n)
-	}
-}
-
-func TestTree_Delete_merge_node(t1 *testing.T) {
-	t := getTree([]string{"A", "B", "D", "E", "F", "C"}, 3)
-	validTree := []validNode[string]{
-		{node: t.root, keys: []string{"D"}, leaf: false, n: 1},
-		{node: t.root.children[0], keys: []string{"A", "B", "C"}, leaf: true, n: 3},
-		{node: t.root.children[1], keys: []string{"E", "F"}, leaf: true, n: 2},
-	}
-
-	// check tree's structure before insert
-	for _, n := range validTree {
-		checkNode(t1, &n)
-	}
-
-	t.Delete("D")
-
-	// check tree's structure after delete
-	validTreeAfterInsert := []validNode[string]{
-		{node: t.root, keys: []string{"C"}, leaf: false, n: 1},
-		{node: t.root.children[0], keys: []string{"A", "B"}, leaf: true, n: 2},
-		{node: t.root.children[1], keys: []string{"E", "F"}, leaf: true, n: 2},
-	}
-	for _, n := range validTreeAfterInsert {
-		checkNode(t1, &n)
-	}
+	// check tree structure before deleting
+	checkTreeStructure(t, t1, validTree)
 
 	t.Delete("C")
 
 	// check tree's structure after delete
-	validTreeAfterSecondInsert := []validNode[string]{
-		{node: t.root, keys: []string{"A", "B", "E", "F"}, leaf: true, n: 4},
+	validTreeAfterDeleting := []validNodeStorage[string]{
+		{
+			nodeName: "0",
+			want: &Node[string]{
+				Name:     "0",
+				Keys:     []string{"D"},
+				Children: []string{"00", "01"},
+				Leaf:     false,
+			},
+		},
+		{
+			nodeName: "00",
+			want: &Node[string]{
+				Name:     "00",
+				Keys:     []string{"A", "B"},
+				Children: []string{},
+				Leaf:     true,
+			},
+		},
+		{
+			nodeName: "01",
+			want: &Node[string]{
+				Name:     "01",
+				Keys:     []string{"E", "F", "G", "K", "M"},
+				Children: []string{},
+				Leaf:     true,
+			},
+		},
 	}
-	for _, n := range validTreeAfterSecondInsert {
-		checkNode(t1, &n)
+	// check tree structure after deleting
+	checkTreeStructure(t, t1, validTreeAfterDeleting)
+}
+
+func TestTreeStorage_Delete_delete_key_from_right_child(t1 *testing.T) {
+	testFolder := "delete_key_from_right_child"
+	defer os.RemoveAll(testFolder)
+	t := createTreeStorage(3, []string{"A", "B", "D", "E", "F", "C", "G", "K", "M"}, testFolder)
+
+	validTree := []validNodeStorage[string]{
+		{
+			nodeName: "0",
+			want: &Node[string]{
+				Name:     "0",
+				Keys:     []string{"D"},
+				Children: []string{"00", "01"},
+				Leaf:     false,
+			},
+		},
+		{
+			nodeName: "00",
+			want: &Node[string]{
+				Name:     "00",
+				Keys:     []string{"A", "B", "C"},
+				Children: []string{},
+				Leaf:     true,
+			},
+		},
+		{
+			nodeName: "01",
+			want: &Node[string]{
+				Name:     "01",
+				Keys:     []string{"E", "F", "G", "K", "M"},
+				Children: []string{},
+				Leaf:     true,
+			},
+		},
+	}
+
+	// check tree structure before deleting
+	checkTreeStructure(t, t1, validTree)
+
+	t.Delete("G")
+
+	// check tree's structure after delete
+	validTreeAfterDeleting := []validNodeStorage[string]{
+		{
+			nodeName: "0",
+			want: &Node[string]{
+				Name:     "0",
+				Keys:     []string{"D"},
+				Children: []string{"00", "01"},
+				Leaf:     false,
+			},
+		},
+		{
+			nodeName: "00",
+			want: &Node[string]{
+				Name:     "00",
+				Keys:     []string{"A", "B", "C"},
+				Children: []string{},
+				Leaf:     true,
+			},
+		},
+		{
+			nodeName: "01",
+			want: &Node[string]{
+				Name:     "01",
+				Keys:     []string{"E", "F", "K", "M"},
+				Children: []string{},
+				Leaf:     true,
+			},
+		},
+	}
+	// check tree structure after deleting
+	checkTreeStructure(t, t1, validTreeAfterDeleting)
+}
+
+func TestTreeStorage_Delete_get_key_from_left_child(t1 *testing.T) {
+	testFolder := "get_key_from_left_child"
+	defer os.RemoveAll(testFolder)
+	t := createTreeStorage(3, []string{"A", "B", "D", "E", "F", "C", "G", "K", "M"}, testFolder)
+
+	validTree := []validNodeStorage[string]{
+		{
+			nodeName: "0",
+			want: &Node[string]{
+				Name:     "0",
+				Keys:     []string{"D"},
+				Children: []string{"00", "01"},
+				Leaf:     false,
+			},
+		},
+		{
+			nodeName: "00",
+			want: &Node[string]{
+				Name:     "00",
+				Keys:     []string{"A", "B", "C"},
+				Children: []string{},
+				Leaf:     true,
+			},
+		},
+		{
+			nodeName: "01",
+			want: &Node[string]{
+				Name:     "01",
+				Keys:     []string{"E", "F", "G", "K", "M"},
+				Children: []string{},
+				Leaf:     true,
+			},
+		},
+	}
+
+	// check tree structure before deleting
+	checkTreeStructure(t, t1, validTree)
+
+	t.Delete("D")
+
+	// check tree's structure after delete
+	validTreeAfterDeleting := []validNodeStorage[string]{
+		{
+			nodeName: "0",
+			want: &Node[string]{
+				Name:     "0",
+				Keys:     []string{"C"},
+				Children: []string{"00", "01"},
+				Leaf:     false,
+			},
+		},
+		{
+			nodeName: "00",
+			want: &Node[string]{
+				Name:     "00",
+				Keys:     []string{"A", "B"},
+				Children: []string{},
+				Leaf:     true,
+			},
+		},
+		{
+			nodeName: "01",
+			want: &Node[string]{
+				Name:     "01",
+				Keys:     []string{"E", "F", "G", "K", "M"},
+				Children: []string{},
+				Leaf:     true,
+			},
+		},
+	}
+	// check tree structure after deleting
+	checkTreeStructure(t, t1, validTreeAfterDeleting)
+}
+
+func TestTreeStorage_Delete_get_key_from_right_child(t1 *testing.T) {
+	testFolder := "get_key_from_right_child"
+	defer os.RemoveAll(testFolder)
+	t := createTreeStorage(3, []string{"A", "B", "D", "E", "F", "C", "G", "K", "M", "N", "O"}, testFolder)
+
+	validTree := []validNodeStorage[string]{
+		{
+			nodeName: "0",
+			want: &Node[string]{
+				Name:     "0",
+				Keys:     []string{"D", "G"},
+				Children: []string{"00", "01", "02"},
+				Leaf:     false,
+			},
+		},
+		{
+			nodeName: "00",
+			want: &Node[string]{
+				Name:     "00",
+				Keys:     []string{"A", "B", "C"},
+				Children: []string{},
+				Leaf:     true,
+			},
+		},
+		{
+			nodeName: "01",
+			want: &Node[string]{
+				Name:     "01",
+				Keys:     []string{"E", "F"},
+				Children: []string{},
+				Leaf:     true,
+			},
+		},
+		{
+			nodeName: "02",
+			want: &Node[string]{
+				Name:     "02",
+				Keys:     []string{"K", "M", "N", "O"},
+				Children: []string{},
+				Leaf:     true,
+			},
+		},
+	}
+
+	// check tree structure before deleting
+	checkTreeStructure(t, t1, validTree)
+
+	t.Delete("G")
+
+	// check tree's structure after delete
+	validTreeAfterDeleting := []validNodeStorage[string]{
+		{
+			nodeName: "0",
+			want: &Node[string]{
+				Name:     "0",
+				Keys:     []string{"D", "K"},
+				Children: []string{"00", "01", "02"},
+				Leaf:     false,
+			},
+		},
+		{
+			nodeName: "00",
+			want: &Node[string]{
+				Name:     "00",
+				Keys:     []string{"A", "B", "C"},
+				Children: []string{},
+				Leaf:     true,
+			},
+		},
+		{
+			nodeName: "01",
+			want: &Node[string]{
+				Name:     "01",
+				Keys:     []string{"E", "F"},
+				Children: []string{},
+				Leaf:     true,
+			},
+		},
+		{
+			nodeName: "02",
+			want: &Node[string]{
+				Name:     "02",
+				Keys:     []string{"M", "N", "O"},
+				Children: []string{},
+				Leaf:     true,
+			},
+		},
+	}
+	// check tree structure after deleting
+	checkTreeStructure(t, t1, validTreeAfterDeleting)
+}
+
+func TestTreeStorage_Delete_merge_nodes(t1 *testing.T) {
+	testFolder := "merge_nodes"
+	defer os.RemoveAll(testFolder)
+	t := createTreeStorage(3, []string{"A", "B", "D", "E", "F", "C"}, testFolder)
+
+	validTree := []validNodeStorage[string]{
+		{
+			nodeName: "0",
+			want: &Node[string]{
+				Name:     "0",
+				Keys:     []string{"D"},
+				Children: []string{"00", "01"},
+				Leaf:     false,
+			},
+		},
+		{
+			nodeName: "00",
+			want: &Node[string]{
+				Name:     "00",
+				Keys:     []string{"A", "B", "C"},
+				Children: []string{},
+				Leaf:     true,
+			},
+		},
+		{
+			nodeName: "01",
+			want: &Node[string]{
+				Name:     "01",
+				Keys:     []string{"E", "F"},
+				Children: []string{},
+				Leaf:     true,
+			},
+		},
+	}
+	// check tree structure before deleting
+	checkTreeStructure(t, t1, validTree)
+
+	t.Delete("D")
+	t.Delete("C")
+
+	validTreeAfterDeleting := []validNodeStorage[string]{
+		{
+			nodeName: "0",
+			want: &Node[string]{
+				Name:     "0",
+				Keys:     []string{"A", "B", "E", "F"},
+				Children: []string{},
+				Leaf:     true,
+			},
+		},
+	}
+
+	// check tree structure after deleting
+	checkTreeStructure(t, t1, validTreeAfterDeleting)
+
+	_, err := t.storage.Read("00")
+	if err == nil {
+		t1.Errorf("Node 00 exists")
+	}
+	_, err = t.storage.Read("01")
+	if err == nil {
+		t1.Errorf("Node 01 exists")
 	}
 }
 
-type validNode[V constraints.Ordered] struct {
-	node *node[V]
-	n    int
-	keys []V
-	leaf bool
-}
-
-func checkNode[V constraints.Ordered](t *testing.T, vn *validNode[V]) {
-	if vn == nil {
-		return
-	}
-
-	if len(vn.keys) != len(vn.node.keys) {
-		t.Errorf("Error in len - Want keys: %v, have keys %v",
-			vn.keys,
-			vn.node.keys,
-		)
-	}
-
-	for i := 0; i < len(vn.keys); i++ {
-		if vn.keys[i] != vn.node.keys[i] {
-			t.Errorf("Error - Want keys: %v, have keys %v",
-				vn.keys,
-				vn.node.keys,
-			)
-		}
-	}
-
-	if vn.node.leaf != vn.leaf {
-		t.Errorf("Error - Want leaf: %v, have leaf: %v",
-			vn.leaf,
-			vn.node.leaf,
-		)
-	}
-
-	if vn.node.n != vn.n {
-		t.Errorf("Error - Want n: %v, have n: %v",
-			vn.n,
-			vn.node.n,
-		)
-	}
-}
-
-func getTree(elements []string, t int) *Tree[string] {
-	tree, _ := New[string](t)
+func createTreeStorage(t int, elements []string, name string) *Tree[string] {
+	s, _ := NewDiskStorage[string](name, t)
+	tree, _ := NewTree[string](t, s)
 	for _, el := range elements {
 		tree.Insert(el)
 	}
 
 	return tree
+}
+
+type validNodeStorage[V constraints.Ordered] struct {
+	nodeName string
+	want     *Node[V]
+}
+
+func checkTreeStructure(t *Tree[string], t1 *testing.T, treeData []validNodeStorage[string]) {
+	for _, vn := range treeData {
+		n, err := t.storage.Read(vn.nodeName)
+		if err != nil {
+			t1.Errorf("Error reading Node %s: %v", vn.nodeName, err)
+			continue
+		}
+
+		if !reflect.DeepEqual(n, vn.want) {
+			t1.Errorf("Node %s has unexpected content. Got: %+v, Want: %+v", vn.nodeName, n, vn.want)
+		}
+	}
 }
